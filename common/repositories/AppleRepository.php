@@ -3,18 +3,21 @@
 namespace common\repositories;
 
 use common\models\Apple;
-use yii\web\NotFoundHttpException;
+use common\exceptions\AppleNotFoundException;
 
 /**
- * Repository for Apple model
+ * Репозиторий для работы с моделью Apple
+ *
+ * Инкапсулирует логику доступа к данным яблок в базе данных.
+ * Следует паттерну Repository для разделения бизнес-логики и логики доступа к данным.
  */
 class AppleRepository
 {
     /**
-     * Find all apples
+     * Получить все яблоки
      *
-     * @param array $orderBy
-     * @return Apple[]
+     * @param array $orderBy Параметры сортировки
+     * @return Apple[] Массив всех яблок
      */
     public function findAll(array $orderBy = ['id' => SORT_DESC])
     {
@@ -22,28 +25,31 @@ class AppleRepository
     }
 
     /**
-     * Find apple by ID
+     * Найти яблоко по ID
      *
-     * @param int $id
+     * @param int $id Идентификатор яблока
      * @return Apple
-     * @throws NotFoundHttpException
+     * @throws AppleNotFoundException Если яблоко не найдено
      */
     public function findById($id)
     {
         $model = Apple::findOne(['id' => $id]);
 
         if ($model === null) {
-            throw new NotFoundHttpException('Яблоко не найдено.');
+            throw new AppleNotFoundException($id);
         }
+
+        // Обновляем статус гнилости перед возвратом
+        $model->updateRottenStatus();
 
         return $model;
     }
 
     /**
-     * Save apple model
+     * Сохранить яблоко
      *
-     * @param Apple $apple
-     * @return bool
+     * @param Apple $apple Яблоко для сохранения
+     * @return bool True в случае успеха
      */
     public function save(Apple $apple)
     {
@@ -51,10 +57,10 @@ class AppleRepository
     }
 
     /**
-     * Delete apple model
+     * Удалить яблоко
      *
-     * @param Apple $apple
-     * @return false|int
+     * @param Apple $apple Яблоко для удаления
+     * @return int|false Количество удаленных записей или false при ошибке
      * @throws \Throwable
      * @throws \yii\db\StaleObjectException
      */
@@ -64,7 +70,7 @@ class AppleRepository
     }
 
     /**
-     * Create new apple instance
+     * Создать новый экземпляр яблока
      *
      * @return Apple
      */
@@ -74,16 +80,102 @@ class AppleRepository
     }
 
     /**
-     * Update rotten status for all fallen apples
+     * Обновить статус гнилости для всех упавших яблок
      *
-     * @return void
+     * Проходит по всем яблокам и обновляет их статус,
+     * если они испортились (лежат больше 5 часов).
+     *
+     * @return int Количество обновленных яблок
      */
     public function updateRottenStatusForAll()
     {
         $apples = $this->findAll();
+        $updated = 0;
 
         foreach ($apples as $apple) {
+            $oldStatus = $apple->status;
             $apple->updateRottenStatus();
+
+            if ($apple->status !== $oldStatus) {
+                $updated++;
+            }
         }
+
+        return $updated;
+    }
+
+    /**
+     * Получить яблоки по статусу
+     *
+     * @param string $status Статус яблока (on_tree, fallen, rotten)
+     * @return Apple[] Массив яблок с указанным статусом
+     */
+    public function findByStatus($status)
+    {
+        return Apple::find()
+            ->where(['status' => $status])
+            ->all();
+    }
+
+    /**
+     * Получить яблоки по цвету
+     *
+     * @param string $color Цвет яблока (red, green, yellow)
+     * @return Apple[] Массив яблок указанного цвета
+     */
+    public function findByColor($color)
+    {
+        return Apple::find()
+            ->where(['color' => $color])
+            ->all();
+    }
+
+    /**
+     * Получить количество яблок
+     *
+     * @param string|null $status Опциональный фильтр по статусу
+     * @return int Количество яблок
+     */
+    public function count($status = null)
+    {
+        $query = Apple::find();
+
+        if ($status !== null) {
+            $query->where(['status' => $status]);
+        }
+
+        return $query->count();
+    }
+
+    /**
+     * Получить статистику по яблокам
+     *
+     * @return array Массив со статистикой
+     */
+    public function getStatistics()
+    {
+        return [
+            'total' => $this->count(),
+            'on_tree' => $this->count(Apple::STATUS_ON_TREE),
+            'fallen' => $this->count(Apple::STATUS_FALLEN),
+            'rotten' => $this->count(Apple::STATUS_ROTTEN),
+            'by_color' => [
+                'red' => Apple::find()->where(['color' => 'red'])->count(),
+                'green' => Apple::find()->where(['color' => 'green'])->count(),
+                'yellow' => Apple::find()->where(['color' => 'yellow'])->count(),
+            ],
+        ];
+    }
+
+    /**
+     * Проверить существование яблока по ID
+     *
+     * @param int $id Идентификатор яблока
+     * @return bool True, если яблоко существует
+     */
+    public function exists($id)
+    {
+        return Apple::find()->where(['id' => $id])->exists();
     }
 }
+

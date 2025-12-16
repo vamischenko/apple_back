@@ -23,20 +23,23 @@ class AppleController extends Controller
     /**
      * Конструктор контроллера
      *
+     * Сервис внедряется через DI контейнер Yii2.
+     *
      * @param string $id Идентификатор контроллера
      * @param \yii\base\Module $module Модуль, которому принадлежит контроллер
+     * @param AppleService $appleService Сервис яблок (внедряется через DI)
      * @param array $config Параметры конфигурации
      */
-    public function __construct($id, $module, $config = [])
+    public function __construct($id, $module, AppleService $appleService = null, $config = [])
     {
+        $this->appleService = $appleService ?: Yii::$app->get('appleService');
         parent::__construct($id, $module, $config);
-        $this->appleService = new AppleService();
     }
 
     /**
      * Настройка поведений контроллера
      *
-     * Настраивает контроль доступа и разрешенные HTTP методы для действий
+     * Настраивает RBAC контроль доступа и разрешенные HTTP методы для действий
      *
      * @return array Массив настроек поведений
      */
@@ -47,8 +50,24 @@ class AppleController extends Controller
                 'class' => AccessControl::class,
                 'rules' => [
                     [
+                        'actions' => ['index'],
                         'allow' => true,
-                        'roles' => ['@'],
+                        'roles' => ['viewApple'], // Разрешение на просмотр
+                    ],
+                    [
+                        'actions' => ['generate'],
+                        'allow' => true,
+                        'roles' => ['createApple'], // Разрешение на создание
+                    ],
+                    [
+                        'actions' => ['fall', 'eat'],
+                        'allow' => true,
+                        'roles' => ['updateApple'], // Разрешение на обновление
+                    ],
+                    [
+                        'actions' => ['delete'],
+                        'allow' => true,
+                        'roles' => ['deleteApple'], // Разрешение на удаление
                     ],
                 ],
             ],
@@ -60,6 +79,11 @@ class AppleController extends Controller
                     'eat' => ['POST'],
                     'generate' => ['POST'],
                 ],
+            ],
+            'rateLimiter' => [
+                'class' => \yii\filters\RateLimiter::class,
+                'only' => ['generate'],
+                'user' => Yii::$app->user,
             ],
         ];
     }

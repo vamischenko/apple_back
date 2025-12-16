@@ -13,6 +13,9 @@ return [
     'bootstrap' => ['log'],
     'modules' => [],
     'components' => [
+        'appleService' => [
+            'class' => \common\services\AppleService::class,
+        ],
         'request' => [
             'csrfParam' => '_csrf-backend',
         ],

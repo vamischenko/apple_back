@@ -4,30 +4,46 @@ namespace common\models;
 
 use Yii;
 use yii\db\ActiveRecord;
-use yii\behaviors\TimestampBehavior;
+use common\exceptions\AppleInvalidStateException;
+use common\exceptions\AppleValidationException;
 
 /**
- * This is the model class for table "apple".
+ * Модель яблока
  *
- * @property int $id
- * @property string $color
- * @property int $created_at
- * @property int|null $fell_at
- * @property string $status
- * @property float $eaten_percent
+ * Представляет яблоко в системе с возможностью отслеживания его состояния,
+ * от появления на дереве до падения, гниения и съедения.
+ *
+ * @property int $id ID яблока
+ * @property string $color Цвет яблока (red, green, yellow)
+ * @property int $created_at Временная метка появления яблока (UNIX timestamp)
+ * @property int|null $fell_at Временная метка падения яблока (UNIX timestamp)
+ * @property string $status Статус яблока (on_tree, fallen, rotten)
+ * @property float $eaten_percent Процент съеденной части (0-100)
+ *
+ * @property-read float $size Размер яблока (от 0 до 1)
+ * @property-read string $statusLabel Человекочитаемое название статуса
  */
 class Apple extends ActiveRecord
 {
+    /** @var string Статус: яблоко на дереве */
     const STATUS_ON_TREE = 'on_tree';
+
+    /** @var string Статус: яблоко упало на землю */
     const STATUS_FALLEN = 'fallen';
+
+    /** @var string Статус: яблоко испортилось */
     const STATUS_ROTTEN = 'rotten';
 
+    /** @var array Доступные цвета яблок */
     const COLORS = ['red', 'green', 'yellow'];
 
-    const ROTTEN_TIME = 5 * 3600; // 5 часов в секундах
+    /** @var int Время в секундах, через которое яблоко портится после падения (5 часов) */
+    const ROTTEN_TIME = 5 * 3600;
 
     /**
-     * {@inheritdoc}
+     * Возвращает имя таблицы базы данных
+     *
+     * @return string Имя таблицы
      */
     public static function tableName()
     {
@@ -35,7 +51,9 @@ class Apple extends ActiveRecord
     }
 
     /**
-     * {@inheritdoc}
+     * Правила валидации атрибутов модели
+     *
+     * @return array Массив правил валидации
      */
     public function rules()
     {
@@ -50,7 +68,9 @@ class Apple extends ActiveRecord
     }
 
     /**
-     * {@inheritdoc}
+     * Возвращает метки атрибутов для отображения
+     *
+     * @return array Ассоциативный массив меток атрибутов
      */
     public function attributeLabels()
     {
@@ -67,7 +87,11 @@ class Apple extends ActiveRecord
     /**
      * Создает новое яблоко со случайным цветом и датой появления
      *
-     * @return Apple
+     * Генерирует яблоко с случайным цветом из доступных вариантов,
+     * случайной датой появления за последние 30 дней, статусом "на дереве"
+     * и нулевым процентом съеденной части.
+     *
+     * @return Apple|null Созданное яблоко или null в случае ошибки сохранения
      */
     public static function createRandomApple()
     {
@@ -87,33 +111,48 @@ class Apple extends ActiveRecord
     /**
      * Яблоко падает с дерева
      *
-     * @throws \Exception
+     * Изменяет статус яблока на "упало" и записывает время падения.
+     * Метод может быть вызван только для яблок, находящихся на дереве.
+     *
+     * @return void
+     * @throws AppleInvalidStateException Если яблоко не на дереве или не удалось сохранить изменения
      */
     public function fallToGround()
     {
         if ($this->status !== self::STATUS_ON_TREE) {
-            throw new \Exception('Яблоко уже не на дереве');
+            throw AppleInvalidStateException::alreadyFallen();
         }
 
         $this->status = self::STATUS_FALLEN;
         $this->fell_at = time();
 
         if (!$this->save()) {
-            throw new \Exception('Не удалось сохранить яблоко');
+            throw AppleInvalidStateException::saveFailed();
         }
     }
 
     /**
      * Откусить от яблока
      *
+     * Увеличивает процент съеденной части яблока на указанное значение.
+     * Метод выполняет следующие проверки:
+     * - Яблоко не должно находиться на дереве
+     * - Яблоко не должно быть гнилым (автоматически обновляет статус)
+     * - Процент должен быть в диапазоне (0, 100]
+     * - Сумма съеденного не должна превышать 100%
+     *
+     * Если яблоко съедено полностью (100%), оно автоматически удаляется из БД.
+     *
      * @param float $percent Процент откушенной части (0-100)
-     * @throws \Exception
+     * @return void
+     * @throws AppleInvalidStateException Если яблоко на дереве, испорчено или не удалось сохранить
+     * @throws AppleValidationException Если процент некорректный или превышает остаток
      */
     public function eat($percent)
     {
         // Проверяем, что яблоко на земле
         if ($this->status === self::STATUS_ON_TREE) {
-            throw new \Exception('Съесть нельзя, яблоко на дереве');
+            throw AppleInvalidStateException::onTree();
         }
 
         // Обновляем статус, если яблоко испортилось
@@ -121,23 +160,24 @@ class Apple extends ActiveRecord
 
         // Проверяем, что яблоко не гнилое
         if ($this->status === self::STATUS_ROTTEN) {
-            throw new \Exception('Съесть нельзя, яблоко испорчено');
+            throw AppleInvalidStateException::rotten();
         }
 
         // Проверяем валидность процента
         if ($percent <= 0 || $percent > 100) {
-            throw new \Exception('Процент должен быть от 0 до 100');
+            throw AppleValidationException::invalidPercent($percent);
         }
 
         // Проверяем, что не пытаемся съесть больше, чем осталось
-        if ($this->eaten_percent + $percent > 100) {
-            throw new \Exception('Нельзя съесть больше, чем осталось');
+        $remaining = 100 - $this->eaten_percent;
+        if ($percent > $remaining) {
+            throw AppleValidationException::exceedsRemaining($percent, $remaining);
         }
 
         $this->eaten_percent += $percent;
 
         if (!$this->save()) {
-            throw new \Exception('Не удалось сохранить яблоко');
+            throw AppleInvalidStateException::saveFailed();
         }
 
         // Если яблоко съедено полностью, удаляем его
@@ -147,7 +187,12 @@ class Apple extends ActiveRecord
     }
 
     /**
-     * Проверяет и обновляет статус яблока на "гнилое", если прошло 5 часов с момента падения
+     * Проверяет и обновляет статус яблока на "гнилое"
+     *
+     * Если яблоко упало и с момента падения прошло более 5 часов,
+     * автоматически изменяет статус на "гнилое" и сохраняет изменения.
+     *
+     * @return void
      */
     public function updateRottenStatus()
     {
@@ -162,9 +207,13 @@ class Apple extends ActiveRecord
     }
 
     /**
-     * Получить размер яблока (от 0 до 1)
+     * Получить размер яблока
      *
-     * @return float
+     * Возвращает размер яблока в виде коэффициента от 0 до 1,
+     * где 1 - яблоко целое, 0 - яблоко полностью съедено.
+     * Размер вычисляется как (100 - процент_съеденного) / 100.
+     *
+     * @return float Размер яблока (0.0 - 1.0)
      */
     public function getSize()
     {
@@ -174,7 +223,10 @@ class Apple extends ActiveRecord
     /**
      * Получить человекочитаемое название статуса
      *
-     * @return string
+     * Преобразует технический статус яблока в локализованную метку
+     * для отображения пользователю.
+     *
+     * @return string Локализованное название статуса
      */
     public function getStatusLabel()
     {
@@ -190,8 +242,11 @@ class Apple extends ActiveRecord
     /**
      * Получить дату в читаемом формате
      *
-     * @param int $timestamp
-     * @return string
+     * Преобразует UNIX timestamp в читаемую строку формата "дд.мм.гггг чч:мм".
+     * Если timestamp не указан (null или 0), возвращает "-".
+     *
+     * @param int|null $timestamp UNIX timestamp для форматирования
+     * @return string Отформатированная дата или "-"
      */
     public function formatDate($timestamp)
     {
@@ -199,7 +254,13 @@ class Apple extends ActiveRecord
     }
 
     /**
-     * Before find - обновляем статус гнилости для всех яблок
+     * Переопределение метода find для ActiveRecord
+     *
+     * В текущей реализации возвращает стандартный объект запроса.
+     * Метод может быть расширен для автоматического обновления
+     * статуса гнилости при выборке записей.
+     *
+     * @return \yii\db\ActiveQuery Объект запроса для выборки записей
      */
     public static function find()
     {

@@ -4,31 +4,37 @@ namespace common\services;
 
 use common\models\Apple;
 use common\repositories\AppleRepository;
+use common\exceptions\AppleNotFoundException;
+use common\exceptions\AppleInvalidStateException;
+use common\exceptions\AppleValidationException;
 
 /**
- * Service for Apple business logic
+ * Сервис для бизнес-логики работы с яблоками
+ *
+ * Инкапсулирует бизнес-логику и координирует взаимодействие
+ * между контроллерами и репозиторием.
  */
 class AppleService
 {
     /**
-     * @var AppleRepository
+     * @var AppleRepository Репозиторий для работы с данными яблок
      */
     private $repository;
 
     /**
-     * AppleService constructor.
+     * Конструктор сервиса
      *
-     * @param AppleRepository|null $repository
+     * @param AppleRepository $repository Репозиторий яблок (внедряется через DI)
      */
-    public function __construct(AppleRepository $repository = null)
+    public function __construct(AppleRepository $repository)
     {
-        $this->repository = $repository ?: new AppleRepository();
+        $this->repository = $repository;
     }
 
     /**
-     * Get all apples with updated rotten status
+     * Получить все яблоки с обновленным статусом гниения
      *
-     * @return Apple[]
+     * @return Apple[] Массив всех яблок
      */
     public function getAllApples()
     {
@@ -37,14 +43,20 @@ class AppleService
     }
 
     /**
-     * Generate random apples
+     * Сгенерировать случайные яблоки
      *
-     * @param int $count Number of apples to generate
-     * @return int Number of actually generated apples
+     * @param int $count Количество яблок для генерации (1-50)
+     * @return int Количество фактически сгенерированных яблок
+     * @throws AppleValidationException Если количество вне допустимого диапазона
      */
     public function generateRandomApples($count)
     {
-        $count = max(1, min(50, (int)$count));
+        $count = (int)$count;
+
+        if ($count < 1 || $count > 50) {
+            throw AppleValidationException::invalidCount($count);
+        }
+
         $generated = 0;
 
         for ($i = 0; $i < $count; $i++) {
@@ -57,11 +69,12 @@ class AppleService
     }
 
     /**
-     * Make apple fall to ground
+     * Уронить яблоко на землю
      *
-     * @param int $id
+     * @param int $id Идентификатор яблока
      * @return void
-     * @throws \Exception
+     * @throws AppleNotFoundException Если яблоко не найдено
+     * @throws AppleInvalidStateException Если яблоко не на дереве
      */
     public function fallApple($id)
     {
@@ -70,12 +83,14 @@ class AppleService
     }
 
     /**
-     * Eat part of apple
+     * Съесть часть яблока
      *
-     * @param int $id
-     * @param float $percent
+     * @param int $id Идентификатор яблока
+     * @param float $percent Процент для съедения (0-100)
      * @return void
-     * @throws \Exception
+     * @throws AppleNotFoundException Если яблоко не найдено
+     * @throws AppleInvalidStateException Если яблоко на дереве или гнилое
+     * @throws AppleValidationException Если процент некорректный
      */
     public function eatApple($id, $percent)
     {
@@ -84,13 +99,13 @@ class AppleService
     }
 
     /**
-     * Delete apple
+     * Удалить яблоко
      *
-     * @param int $id
+     * @param int $id Идентификатор яблока
      * @return void
+     * @throws AppleNotFoundException Если яблоко не найдено
      * @throws \Throwable
      * @throws \yii\db\StaleObjectException
-     * @throws \yii\web\NotFoundHttpException
      */
     public function deleteApple($id)
     {
@@ -99,14 +114,24 @@ class AppleService
     }
 
     /**
-     * Find apple by ID
+     * Найти яблоко по ID
      *
-     * @param int $id
+     * @param int $id Идентификатор яблока
      * @return Apple
-     * @throws \yii\web\NotFoundHttpException
+     * @throws AppleNotFoundException Если яблоко не найдено
      */
     public function findApple($id)
     {
         return $this->repository->findById($id);
+    }
+
+    /**
+     * Получить статистику по яблокам
+     *
+     * @return array Массив со статистикой
+     */
+    public function getStatistics()
+    {
+        return $this->repository->getStatistics();
     }
 }

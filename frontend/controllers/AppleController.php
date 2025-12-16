@@ -15,17 +15,24 @@ use yii\filters\VerbFilter;
 class AppleController extends Controller
 {
     /**
-     * @var AppleService
+     * @var AppleService Сервис для работы с яблоками
      */
     private $appleService;
 
     /**
      * Конструктор контроллера
+     *
+     * Сервис внедряется через DI контейнер Yii2.
+     *
+     * @param string $id Идентификатор контроллера
+     * @param \yii\base\Module $module Модуль, которому принадлежит контроллер
+     * @param AppleService $appleService Сервис яблок (внедряется через DI)
+     * @param array $config Параметры конфигурации
      */
-    public function __construct($id, $module, $config = [])
+    public function __construct($id, $module, AppleService $appleService = null, $config = [])
     {
+        $this->appleService = $appleService ?: Yii::$app->get('appleService');
         parent::__construct($id, $module, $config);
-        $this->appleService = new AppleService();
     }
 
     /**

@@ -12,6 +12,9 @@ return [
     'bootstrap' => ['log'],
     'controllerNamespace' => 'frontend\controllers',
     'components' => [
+        'appleService' => [
+            'class' => \common\services\AppleService::class,
+        ],
         'request' => [
             'csrfParam' => '_csrf-frontend',
         ],

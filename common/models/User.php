@@ -7,6 +7,7 @@ use yii\base\NotSupportedException;
 use yii\behaviors\TimestampBehavior;
 use yii\db\ActiveRecord;
 use yii\web\IdentityInterface;
+use yii\filters\RateLimitInterface;
 
 /**
  * User model
@@ -22,8 +23,10 @@ use yii\web\IdentityInterface;
  * @property integer $created_at
  * @property integer $updated_at
  * @property string $password write-only password
+ * @property integer $allowance Текущий лимит запросов
+ * @property integer $allowance_updated_at Время последнего обновления лимита
  */
-class User extends ActiveRecord implements IdentityInterface
+class User extends ActiveRecord implements IdentityInterface, RateLimitInterface
 {
     const STATUS_DELETED = 0;
     const STATUS_INACTIVE = 9;
@@ -209,5 +212,45 @@ class User extends ActiveRecord implements IdentityInterface
     public function removePasswordResetToken()
     {
         $this->password_reset_token = null;
+    }
+
+    /**
+     * Возвращает максимальное количество разрешенных запросов и временной период
+     *
+     * @param \yii\web\Request $request
+     * @param \yii\base\Action $action
+     * @return array Массив [количество запросов, временной период в секундах]
+     */
+    public function getRateLimit($request, $action)
+    {
+        // 10 запросов в минуту для генерации яблок
+        return [10, 60];
+    }
+
+    /**
+     * Загружает текущий лимит запросов пользователя
+     *
+     * @param \yii\web\Request $request
+     * @param \yii\base\Action $action
+     * @return array Массив [количество оставшихся запросов, timestamp последнего запроса]
+     */
+    public function loadAllowance($request, $action)
+    {
+        return [$this->allowance, $this->allowance_updated_at];
+    }
+
+    /**
+     * Сохраняет текущий лимит запросов пользователя
+     *
+     * @param \yii\web\Request $request
+     * @param \yii\base\Action $action
+     * @param int $allowance Количество оставшихся запросов
+     * @param int $timestamp Timestamp последнего запроса
+     */
+    public function saveAllowance($request, $action, $allowance, $timestamp)
+    {
+        $this->allowance = $allowance;
+        $this->allowance_updated_at = $timestamp;
+        $this->save(false);
     }
 }
