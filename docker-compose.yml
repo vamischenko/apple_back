@@ -1,38 +1,90 @@
-version: '3.2'
+version: '3.8'
 
 services:
-
-  frontend:
-    build: frontend
-    ports:
-      - 20080:80
+  # PHP-FPM с Yii2
+  php:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: apple_php
+    working_dir: /app
     volumes:
-      # Re-use local composer cache via host-volume
-      - ~/.composer-docker/cache:/root/.composer/cache:delegated
-      # Mount source-code for development
       - ./:/app
-
-  backend:
-    build: backend
-    ports:
-      - 21080:80
-    volumes:
-      # Re-use local composer cache via host-volume
       - ~/.composer-docker/cache:/root/.composer/cache:delegated
-      # Mount source-code for development
-      - ./:/app
-
-  mysql:
-    image: mysql:5.7
+      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/custom.ini
     environment:
-      - MYSQL_ROOT_PASSWORD=verysecret
-      - MYSQL_DATABASE=yii2advanced
-      - MYSQL_USER=yii2advanced
-      - MYSQL_PASSWORD=secret
+      - PHP_IDE_CONFIG=serverName=apple_back
+      - DB_HOST=mysql
+      - DB_NAME=apple_db
+      - DB_USER=apple_user
+      - DB_PASSWORD=apple_password
+      - REDIS_HOST=redis
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - apple_network
 
-  #pgsql:
-  #  image: postgres:9.5
-  #  environment:
-  #    - POSTGRES_DB=yii2advanced
-  #    - POSTGRES_USER=yii2advanced
-  #    - POSTGRES_PASSWORD=secret
+  # Nginx веб-сервер
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: apple_nginx
+    ports:
+      - "20080:80"   # Frontend
+      - "21080:81"   # Backend
+    volumes:
+      - ./:/app
+      - ./docker/nginx/backend.conf:/etc/nginx/conf.d/backend.conf
+      - ./docker/nginx/frontend.conf:/etc/nginx/conf.d/frontend.conf
+      - ./docker/nginx/logs:/var/log/nginx
+    depends_on:
+      - php
+    networks:
+      - apple_network
+
+  # MySQL база данных
+  mysql:
+    image: mysql:8.0
+    container_name: apple_mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: verysecret
+      MYSQL_DATABASE: apple_db
+      MYSQL_USER: apple_user
+      MYSQL_PASSWORD: apple_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pverysecret"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - apple_network
+
+  # Redis для кеширования
+  redis:
+    image: redis:7-alpine
+    container_name: apple_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - apple_network
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  apple_network:
+    driver: bridge

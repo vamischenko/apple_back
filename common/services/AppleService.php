@@ -2,6 +2,7 @@
 
 namespace common\services;
 
+use Yii;
 use common\models\Apple;
 use common\repositories\AppleRepository;
 use common\exceptions\AppleNotFoundException;
@@ -34,12 +35,24 @@ class AppleService
     /**
      * Получить все яблоки с обновленным статусом гниения
      *
+     * Использует кеширование для оптимизации производительности.
+     * Кеш сбрасывается при любых изменениях данных яблок.
+     *
      * @return Apple[] Массив всех яблок
      */
     public function getAllApples()
     {
-        $this->repository->updateRottenStatusForAll();
-        return $this->repository->findAll();
+        $cache = Yii::$app->cache;
+        $key = 'apples_list';
+
+        $apples = $cache->get($key);
+        if ($apples === false) {
+            $this->repository->updateRottenStatusForAll();
+            $apples = $this->repository->findAll();
+            $cache->set($key, $apples, 60); // Кеш на 60 секунд
+        }
+
+        return $apples;
     }
 
     /**
@@ -65,6 +78,9 @@ class AppleService
             }
         }
 
+        // Сбросить кеш после генерации
+        $this->clearCache();
+
         return $generated;
     }
 
@@ -80,6 +96,9 @@ class AppleService
     {
         $apple = $this->repository->findById($id);
         $apple->fallToGround();
+
+        // Сбросить кеш после изменения
+        $this->clearCache();
     }
 
     /**
@@ -96,6 +115,9 @@ class AppleService
     {
         $apple = $this->repository->findById($id);
         $apple->eat($percent);
+
+        // Сбросить кеш после изменения
+        $this->clearCache();
     }
 
     /**
@@ -111,6 +133,9 @@ class AppleService
     {
         $apple = $this->repository->findById($id);
         $this->repository->delete($apple);
+
+        // Сбросить кеш после удаления
+        $this->clearCache();
     }
 
     /**
@@ -133,5 +158,18 @@ class AppleService
     public function getStatistics()
     {
         return $this->repository->getStatistics();
+    }
+
+    /**
+     * Сбросить кеш списка яблок
+     *
+     * Вызывается после любых операций изменения данных
+     * (создание, обновление, удаление яблок).
+     *
+     * @return void
+     */
+    private function clearCache()
+    {
+        Yii::$app->cache->delete('apples_list');
     }
 }

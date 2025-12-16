@@ -56,19 +56,19 @@ $this->params['breadcrumbs'][] = $this->title;
 
     <h1><?= Html::encode($this->title) ?></h1>
 
+    <!-- Контейнер для уведомлений AJAX -->
+    <div id="ajax-notifications"></div>
+
     <div class="generate-form">
         <h3>Генерация яблок</h3>
-        <?php echo Html::beginForm(['generate'], 'post', ['style' => 'display: inline-block;']); ?>
+        <form id="generate-form">
             <div class="form-group" style="display: inline-block; margin-right: 10px;">
-                <?= Html::input('number', 'count', 5, [
-                    'class' => 'form-control',
-                    'min' => 1,
-                    'max' => 50,
-                    'style' => 'width: 100px; display: inline-block;'
-                ]) ?>
+                <input type="number" name="count" id="count-input" value="5" min="1" max="50" class="form-control" style="width: 100px; display: inline-block;">
             </div>
-            <?= Html::submitButton('🌳 Сгенерировать яблоки', ['class' => 'btn btn-success']) ?>
-        <?php echo Html::endForm(); ?>
+            <button type="submit" class="btn btn-success" id="generate-btn">
+                🌳 Сгенерировать яблоки
+            </button>
+        </form>
     </div>
 
     <?php if (Yii::$app->session->hasFlash('success')): ?>
@@ -118,7 +118,7 @@ $this->params['breadcrumbs'][] = $this->title;
             }
             ?>
 
-            <div class="apple-card <?= $statusClass ?>">
+            <div class="apple-card <?= $statusClass ?>" data-apple-id="<?= $apple->id ?>">
                 <div>
                     <span class="apple-emoji"><?= $emoji ?></span>
                     <div class="apple-info">
@@ -149,39 +149,196 @@ $this->params['breadcrumbs'][] = $this->title;
                 <div class="apple-actions">
                     <?php if ($apple->status === Apple::STATUS_ON_TREE): ?>
                         <!-- Кнопка "Упасть" -->
-                        <?= Html::beginForm(['fall', 'id' => $apple->id], 'post', ['style' => 'display: inline-block;']) ?>
-                            <?= Html::submitButton('⬇️ Упасть', ['class' => 'btn btn-warning btn-sm']) ?>
-                        <?= Html::endForm() ?>
+                        <button class="btn btn-warning btn-sm ajax-fall" data-id="<?= $apple->id ?>">
+                            ⬇️ Упасть
+                        </button>
                     <?php endif; ?>
 
                     <?php if ($apple->status === Apple::STATUS_FALLEN): ?>
                         <!-- Форма "Съесть" с указанием процента -->
-                        <?= Html::beginForm(['eat', 'id' => $apple->id], 'post', ['style' => 'display: inline-block; margin-right: 5px;']) ?>
+                        <div style="display: inline-block; margin-right: 5px;">
                             <div class="input-group input-group-sm" style="width: 200px; display: inline-flex;">
-                                <?= Html::input('number', 'percent', 25, [
-                                    'class' => 'form-control',
-                                    'min' => 1,
-                                    'max' => 100 - $apple->eaten_percent,
-                                    'step' => 0.01,
-                                    'placeholder' => '%'
-                                ]) ?>
+                                <input type="number"
+                                       class="form-control eat-percent-input"
+                                       data-id="<?= $apple->id ?>"
+                                       value="25"
+                                       min="1"
+                                       max="<?= 100 - $apple->eaten_percent ?>"
+                                       step="0.01"
+                                       placeholder="%">
                                 <div class="input-group-append">
-                                    <?= Html::submitButton('🍴 Съесть %', ['class' => 'btn btn-primary btn-sm']) ?>
+                                    <button class="btn btn-primary btn-sm ajax-eat" data-id="<?= $apple->id ?>">
+                                        🍴 Съесть %
+                                    </button>
                                 </div>
                             </div>
-                        <?= Html::endForm() ?>
+                        </div>
                     <?php endif; ?>
 
                     <!-- Кнопка удаления -->
-                    <?= Html::beginForm(['delete', 'id' => $apple->id], 'post', [
-                        'style' => 'display: inline-block;',
-                        'onsubmit' => 'return confirm("Вы уверены, что хотите удалить это яблоко?");'
-                    ]) ?>
-                        <?= Html::submitButton('🗑️ Удалить', ['class' => 'btn btn-danger btn-sm']) ?>
-                    <?= Html::endForm() ?>
+                    <button class="btn btn-danger btn-sm ajax-delete" data-id="<?= $apple->id ?>">
+                        🗑️ Удалить
+                    </button>
                 </div>
             </div>
         <?php endforeach; ?>
     <?php endif; ?>
 
 </div>
+
+<script>
+// CSRF Token для Yii2
+const csrfToken = '<?= Yii::$app->request->csrfToken ?>';
+
+// Функция для показа уведомлений
+function showNotification(message, type = 'success') {
+    const container = document.getElementById('ajax-notifications');
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${type} alert-dismissible fade show`;
+    alert.role = 'alert';
+    alert.innerHTML = `
+        ${message}
+        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+        </button>
+    `;
+    container.appendChild(alert);
+
+    // Автоматически скрыть через 5 секунд
+    setTimeout(() => {
+        alert.classList.remove('show');
+        setTimeout(() => alert.remove(), 150);
+    }, 5000);
+}
+
+// Генерация яблок
+document.getElementById('generate-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const count = document.getElementById('count-input').value;
+    const button = document.getElementById('generate-btn');
+    button.disabled = true;
+    button.textContent = '⏳ Генерация...';
+
+    fetch('<?= Url::to(['generate']) ?>', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRF-Token': csrfToken
+        },
+        body: `count=${count}&<?= Yii::$app->request->csrfParam ?>=${csrfToken}`
+    })
+    .then(response => {
+        if (response.status === 429) {
+            throw new Error('Превышен лимит запросов. Попробуйте позже.');
+        }
+        return response.text();
+    })
+    .then(() => {
+        showNotification(`Сгенерировано ${count} яблок`, 'success');
+        button.disabled = false;
+        button.textContent = '🌳 Сгенерировать яблоки';
+        // Перезагрузить страницу через 1 секунду
+        setTimeout(() => location.reload(), 1000);
+    })
+    .catch(error => {
+        showNotification(error.message || 'Ошибка при генерации яблок', 'danger');
+        button.disabled = false;
+        button.textContent = '🌳 Сгенерировать яблоки';
+    });
+});
+
+// Падение яблока
+document.querySelectorAll('.ajax-fall').forEach(button => {
+    button.addEventListener('click', function() {
+        const id = this.getAttribute('data-id');
+        this.disabled = true;
+        this.textContent = '⏳ Падает...';
+
+        fetch('<?= Url::to(['fall']) ?>?id=' + id, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-Token': csrfToken
+            },
+            body: `<?= Yii::$app->request->csrfParam ?>=${csrfToken}`
+        })
+        .then(response => response.text())
+        .then(() => {
+            showNotification('Яблоко упало на землю', 'success');
+            // Перезагрузить страницу через 0.5 секунд
+            setTimeout(() => location.reload(), 500);
+        })
+        .catch(error => {
+            showNotification('Ошибка при падении яблока', 'danger');
+            this.disabled = false;
+            this.textContent = '⬇️ Упасть';
+        });
+    });
+});
+
+// Съесть яблоко
+document.querySelectorAll('.ajax-eat').forEach(button => {
+    button.addEventListener('click', function() {
+        const id = this.getAttribute('data-id');
+        const percentInput = document.querySelector(`.eat-percent-input[data-id="${id}"]`);
+        const percent = percentInput.value;
+
+        this.disabled = true;
+        this.textContent = '⏳ Кушаем...';
+
+        fetch('<?= Url::to(['eat']) ?>?id=' + id, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRF-Token': csrfToken
+            },
+            body: `percent=${percent}&<?= Yii::$app->request->csrfParam ?>=${csrfToken}`
+        })
+        .then(response => response.text())
+        .then(() => {
+            showNotification(`Откушено ${percent}% яблока`, 'success');
+            // Перезагрузить страницу через 0.5 секунд
+            setTimeout(() => location.reload(), 500);
+        })
+        .catch(error => {
+            showNotification('Ошибка при поедании яблока', 'danger');
+            this.disabled = false;
+            this.textContent = '🍴 Съесть %';
+        });
+    });
+});
+
+// Удаление яблока
+document.querySelectorAll('.ajax-delete').forEach(button => {
+    button.addEventListener('click', function() {
+        if (!confirm('Вы уверены, что хотите удалить это яблоко?')) {
+            return;
+        }
+
+        const id = this.getAttribute('data-id');
+        this.disabled = true;
+        this.textContent = '⏳ Удаление...';
+
+        fetch('<?= Url::to(['delete']) ?>?id=' + id, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-Token': csrfToken
+            },
+            body: `<?= Yii::$app->request->csrfParam ?>=${csrfToken}`
+        })
+        .then(response => response.text())
+        .then(() => {
+            showNotification('Яблоко удалено', 'success');
+            // Скрыть карточку с анимацией
+            const card = document.querySelector(`.apple-card[data-apple-id="${id}"]`);
+            card.style.opacity = '0';
+            card.style.transition = 'opacity 0.5s';
+            setTimeout(() => card.remove(), 500);
+        })
+        .catch(error => {
+            showNotification('Ошибка при удалении яблока', 'danger');
+            this.disabled = false;
+            this.textContent = '🗑️ Удалить';
+        });
+    });
+});
+</script>

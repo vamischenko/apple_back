@@ -11,7 +11,14 @@ return [
             'cache' => 'cache',
         ],
         'cache' => [
-            'class' => \yii\caching\FileCache::class,
+            // Использует Redis если доступен (в Docker), иначе FileCache
+            'class' => getenv('REDIS_HOST') ? \yii\redis\Cache::class : \yii\caching\FileCache::class,
+        ],
+        'redis' => [
+            'class' => \yii\redis\Connection::class,
+            'hostname' => getenv('REDIS_HOST') ?: 'localhost',
+            'port' => 6379,
+            'database' => 0,
         ],
     ],
     'container' => [
