@@ -4,14 +4,15 @@ namespace backend\controllers\api;
 
 use Yii;
 use yii\rest\ActiveController;
-use yii\filters\auth\HttpBearerAuth;
 use yii\filters\ContentNegotiator;
 use yii\web\Response;
 use common\models\Apple;
+use common\models\forms\GenerateApplesForm;
+use common\models\forms\EatAppleForm;
 use common\services\AppleService;
 use common\services\AppleMetricsService;
-use common\repositories\AppleRepository;
 use yii\web\NotFoundHttpException;
+use yii\web\BadRequestHttpException;
 
 /**
  * REST API контроллер для управления яблоками
@@ -41,14 +42,24 @@ class AppleController extends ActiveController
     private AppleMetricsService $metricsService;
 
     /**
-     * Конструктор контроллера
+     * Конструктор контроллера с Dependency Injection
+     *
+     * @param string $id ID контроллера
+     * @param \yii\base\Module $module Модуль контроллера
+     * @param AppleService $appleService Сервис яблок (внедряется через DI)
+     * @param AppleMetricsService $metricsService Сервис метрик (внедряется через DI)
+     * @param array $config Конфигурация
      */
-    public function __construct($id, $module, $config = [])
-    {
+    public function __construct(
+        $id,
+        $module,
+        AppleService $appleService,
+        AppleMetricsService $metricsService,
+        $config = []
+    ) {
         parent::__construct($id, $module, $config);
-        $repository = new AppleRepository();
-        $this->appleService = new AppleService($repository);
-        $this->metricsService = new AppleMetricsService($repository);
+        $this->appleService = $appleService;
+        $this->metricsService = $metricsService;
     }
 
     /**
@@ -86,15 +97,37 @@ class AppleController extends ActiveController
     }
 
     /**
-     * GET /api/apples - получить список всех яблок
+     * GET /api/apples - получить список всех яблок с пагинацией
+     *
+     * Query параметры:
+     * - page: номер страницы (по умолчанию 1)
+     * - per-page: элементов на странице (по умолчанию 20, макс 100)
      */
     public function actionIndex()
     {
-        $apples = $this->appleService->getAllApples();
+        $page = max(1, (int)Yii::$app->request->get('page', 1));
+        $perPage = min(100, max(1, (int)Yii::$app->request->get('per-page', 20)));
 
-        return array_map(function($apple) {
+        $allApples = $this->appleService->getAllApples();
+        $total = count($allApples);
+
+        // Пагинация
+        $offset = ($page - 1) * $perPage;
+        $apples = array_slice($allApples, $offset, $perPage);
+
+        $items = array_map(function($apple) {
             return $this->formatAppleResponse($apple);
         }, $apples);
+
+        return [
+            'items' => $items,
+            'pagination' => [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'total_pages' => ceil($total / $perPage),
+            ],
+        ];
     }
 
     /**
@@ -132,14 +165,33 @@ class AppleController extends ActiveController
      */
     public function actionGenerate()
     {
-        $count = Yii::$app->request->post('count', 1);
-        $generated = $this->appleService->generateRandomApples($count);
+        $form = new GenerateApplesForm();
+        $form->load(Yii::$app->request->post(), '');
 
-        return [
-            'success' => true,
-            'generated' => $generated,
-            'message' => "Сгенерировано яблок: {$generated}"
-        ];
+        if (!$form->validate()) {
+            Yii::$app->response->statusCode = 400;
+            return [
+                'success' => false,
+                'errors' => $form->errors,
+                'message' => 'Ошибка валидации данных'
+            ];
+        }
+
+        try {
+            $generated = $this->appleService->generateRandomApples($form->count);
+
+            return [
+                'success' => true,
+                'generated' => $generated,
+                'message' => "Сгенерировано яблок: {$generated}"
+            ];
+        } catch (\Exception $e) {
+            Yii::$app->response->statusCode = 400;
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
     }
 
     /**
@@ -170,17 +222,27 @@ class AppleController extends ActiveController
      */
     public function actionEat($id)
     {
-        $percent = (float)Yii::$app->request->post('percent', 25);
+        $form = new EatAppleForm();
+        $form->load(Yii::$app->request->post(), '');
+
+        if (!$form->validate()) {
+            Yii::$app->response->statusCode = 400;
+            return [
+                'success' => false,
+                'errors' => $form->errors,
+                'message' => 'Ошибка валидации данных'
+            ];
+        }
 
         try {
-            $this->appleService->eatApple($id, $percent);
+            $this->appleService->eatApple($id, $form->percent);
 
             // Проверяем, существует ли еще яблоко (могло быть удалено, если съедено полностью)
             try {
                 $apple = $this->appleService->findApple($id);
                 return [
                     'success' => true,
-                    'message' => "Откушено {$percent}% яблока",
+                    'message' => "Откушено {$form->percent}% яблока",
                     'apple' => $this->formatAppleResponse($apple)
                 ];
             } catch (NotFoundHttpException $e) {

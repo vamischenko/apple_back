@@ -82,26 +82,25 @@ class AppleRepository
     /**
      * Обновить статус гнилости для всех упавших яблок
      *
-     * Проходит по всем яблокам и обновляет их статус,
-     * если они испортились (лежат больше 5 часов).
+     * Использует один SQL UPDATE запрос для массового обновления статусов
+     * всех яблок, которые испортились (лежат больше 5 часов).
+     * Это намного эффективнее, чем обновлять каждое яблоко отдельно (N+1 проблема).
      *
      * @return int Количество обновленных яблок
      */
     public function updateRottenStatusForAll(): int
     {
-        $apples = $this->findAll();
-        $updated = 0;
+        $rottenTime = time() - Apple::ROTTEN_TIME;
 
-        foreach ($apples as $apple) {
-            $oldStatus = $apple->status;
-            $apple->updateRottenStatus();
-
-            if ($apple->status !== $oldStatus) {
-                $updated++;
-            }
-        }
-
-        return $updated;
+        return Apple::updateAll(
+            ['status' => Apple::STATUS_ROTTEN],
+            [
+                'and',
+                ['status' => Apple::STATUS_FALLEN],
+                ['<=', 'fell_at', $rottenTime],
+                ['not', ['fell_at' => null]]
+            ]
+        );
     }
 
     /**
@@ -150,20 +149,57 @@ class AppleRepository
     /**
      * Получить статистику по яблокам
      *
+     * Использует один SQL запрос с GROUP BY для получения всей статистики,
+     * вместо 7 отдельных COUNT запросов.
+     *
      * @return array Массив со статистикой
      */
     public function getStatistics(): array
     {
+        // Получаем статистику по статусам одним запросом
+        $statusStats = Apple::find()
+            ->select(['status', 'COUNT(*) as count'])
+            ->groupBy('status')
+            ->asArray()
+            ->all();
+
+        $statusCounts = [
+            Apple::STATUS_ON_TREE => 0,
+            Apple::STATUS_FALLEN => 0,
+            Apple::STATUS_ROTTEN => 0,
+        ];
+
+        $total = 0;
+        foreach ($statusStats as $stat) {
+            $statusCounts[$stat['status']] = (int)$stat['count'];
+            $total += (int)$stat['count'];
+        }
+
+        // Получаем статистику по цветам одним запросом
+        $colorStats = Apple::find()
+            ->select(['color', 'COUNT(*) as count'])
+            ->groupBy('color')
+            ->asArray()
+            ->all();
+
+        $colorCounts = [
+            'red' => 0,
+            'green' => 0,
+            'yellow' => 0,
+        ];
+
+        foreach ($colorStats as $stat) {
+            if (isset($colorCounts[$stat['color']])) {
+                $colorCounts[$stat['color']] = (int)$stat['count'];
+            }
+        }
+
         return [
-            'total' => $this->count(),
-            'on_tree' => $this->count(Apple::STATUS_ON_TREE),
-            'fallen' => $this->count(Apple::STATUS_FALLEN),
-            'rotten' => $this->count(Apple::STATUS_ROTTEN),
-            'by_color' => [
-                'red' => Apple::find()->where(['color' => 'red'])->count(),
-                'green' => Apple::find()->where(['color' => 'green'])->count(),
-                'yellow' => Apple::find()->where(['color' => 'yellow'])->count(),
-            ],
+            'total' => $total,
+            'on_tree' => $statusCounts[Apple::STATUS_ON_TREE],
+            'fallen' => $statusCounts[Apple::STATUS_FALLEN],
+            'rotten' => $statusCounts[Apple::STATUS_ROTTEN],
+            'by_color' => $colorCounts,
         ];
     }
 

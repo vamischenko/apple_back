@@ -23,7 +23,13 @@ services:
       mysql:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php-fpm -t || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - apple_network
 
@@ -40,7 +46,14 @@ services:
       - ./docker/nginx/frontend.conf:/etc/nginx/conf.d/frontend.conf
       - ./docker/nginx/logs:/var/log/nginx
     depends_on:
-      - php
+      php:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health" , "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks:
       - apple_network
 
@@ -76,6 +89,12 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     networks:
       - apple_network
 

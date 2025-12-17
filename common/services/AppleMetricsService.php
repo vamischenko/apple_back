@@ -231,17 +231,32 @@ class AppleMetricsService
     /**
      * Получить полный отчет по метрикам
      *
+     * Использует кеширование для оптимизации производительности.
+     * Кеш действителен 5 минут (300 секунд).
+     *
      * @return array Полный отчет
      */
     public function getFullReport(): array
     {
-        Yii::info('Generating full metrics report', 'apple');
+        $cache = Yii::$app->cache;
+        $key = 'apple_metrics_full_report';
 
-        return [
-            'statistics' => $this->getExtendedStatistics(),
-            'creation_metrics' => $this->getCreationMetrics(),
-            'rotten_metrics' => $this->getRottenMetrics(),
-            'generated_at' => date('Y-m-d H:i:s'),
-        ];
+        $report = $cache->get($key);
+        if ($report === false) {
+            Yii::info('Generating full metrics report (cache miss)', 'apple');
+
+            $report = [
+                'statistics' => $this->getExtendedStatistics(),
+                'creation_metrics' => $this->getCreationMetrics(),
+                'rotten_metrics' => $this->getRottenMetrics(),
+                'generated_at' => date('Y-m-d H:i:s'),
+            ];
+
+            $cache->set($key, $report, 300); // Кеш на 5 минут
+        } else {
+            Yii::info('Returning cached metrics report', 'apple');
+        }
+
+        return $report;
     }
 }

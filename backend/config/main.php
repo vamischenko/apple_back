@@ -45,15 +45,26 @@ return [
             'enableStrictParsing' => false,
             'showScriptName' => false,
             'rules' => [
-                // API Rules
+                // API Documentation - Swagger
+                'GET api/swagger' => 'api/swagger/ui',
+                'GET api/swagger/ui' => 'api/swagger/ui',
+                'GET api/swagger/json' => 'api/swagger/json',
+
+                // API Rules - Authentication
+                'POST api/auth/login' => 'api/auth/login',
+                'POST api/auth/logout' => 'api/auth/logout',
+
+                // API Rules - Apples
                 'POST api/apples/generate' => 'api/apple/generate',
                 'POST api/apples/<id:\d+>/fall' => 'api/apple/fall',
                 'POST api/apples/<id:\d+>/eat' => 'api/apple/eat',
+                'GET api/apples/metrics' => 'api/apple/metrics',
                 [
                     'class' => \yii\rest\UrlRule::class,
                     'controller' => ['api/apple'],
                     'pluralize' => false,
                     'extraPatterns' => [
+                        'GET metrics' => 'metrics',
                         'POST generate' => 'generate',
                         'POST {id}/fall' => 'fall',
                         'POST {id}/eat' => 'eat',

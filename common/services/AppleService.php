@@ -61,6 +61,7 @@ class AppleService
      * @param int $count Количество яблок для генерации (1-50)
      * @return int Количество фактически сгенерированных яблок
      * @throws AppleValidationException Если количество вне допустимого диапазона
+     * @throws \Throwable
      */
     public function generateRandomApples(int $count): int
     {
@@ -73,20 +74,29 @@ class AppleService
 
         Yii::info("Starting generation of {$count} random apples", 'apple');
 
-        $generated = 0;
+        $transaction = Yii::$app->db->beginTransaction();
+        try {
+            $generated = 0;
 
-        for ($i = 0; $i < $count; $i++) {
-            if (Apple::createRandomApple()) {
-                $generated++;
+            for ($i = 0; $i < $count; $i++) {
+                if (Apple::createRandomApple()) {
+                    $generated++;
+                }
             }
+
+            $transaction->commit();
+
+            // Сбросить кеш после генерации
+            $this->clearCache();
+
+            Yii::info("Successfully generated {$generated} out of {$count} requested apples", 'apple');
+
+            return $generated;
+        } catch (\Exception $e) {
+            $transaction->rollBack();
+            Yii::error("Failed to generate apples: {$e->getMessage()}", 'apple');
+            throw $e;
         }
-
-        // Сбросить кеш после генерации
-        $this->clearCache();
-
-        Yii::info("Successfully generated {$generated} out of {$count} requested apples", 'apple');
-
-        return $generated;
     }
 
     /**
@@ -96,14 +106,23 @@ class AppleService
      * @return void
      * @throws AppleNotFoundException Если яблоко не найдено
      * @throws AppleInvalidStateException Если яблоко не на дереве
+     * @throws \Throwable
      */
     public function fallApple(int $id): void
     {
-        $apple = $this->repository->findById($id);
-        $apple->fallToGround();
+        $transaction = Yii::$app->db->beginTransaction();
+        try {
+            $apple = $this->repository->findById($id);
+            $apple->fallToGround();
 
-        // Сбросить кеш после изменения
-        $this->clearCache();
+            $transaction->commit();
+
+            // Сбросить кеш после изменения
+            $this->clearCache();
+        } catch (\Exception $e) {
+            $transaction->rollBack();
+            throw $e;
+        }
     }
 
     /**
@@ -115,14 +134,23 @@ class AppleService
      * @throws AppleNotFoundException Если яблоко не найдено
      * @throws AppleInvalidStateException Если яблоко на дереве или гнилое
      * @throws AppleValidationException Если процент некорректный
+     * @throws \Throwable
      */
     public function eatApple(int $id, float $percent): void
     {
-        $apple = $this->repository->findById($id);
-        $apple->eat($percent);
+        $transaction = Yii::$app->db->beginTransaction();
+        try {
+            $apple = $this->repository->findById($id);
+            $apple->eat($percent);
 
-        // Сбросить кеш после изменения
-        $this->clearCache();
+            $transaction->commit();
+
+            // Сбросить кеш после изменения
+            $this->clearCache();
+        } catch (\Exception $e) {
+            $transaction->rollBack();
+            throw $e;
+        }
     }
 
     /**
@@ -136,14 +164,22 @@ class AppleService
      */
     public function deleteApple(int $id): void
     {
-        $apple = $this->repository->findById($id);
+        $transaction = Yii::$app->db->beginTransaction();
+        try {
+            $apple = $this->repository->findById($id);
 
-        Yii::info("Deleting apple #{$id} (color: {$apple->color}, status: {$apple->status})", 'apple');
+            Yii::info("Deleting apple #{$id} (color: {$apple->color}, status: {$apple->status})", 'apple');
 
-        $this->repository->delete($apple);
+            $this->repository->delete($apple);
 
-        // Сбросить кеш после удаления
-        $this->clearCache();
+            $transaction->commit();
+
+            // Сбросить кеш после удаления
+            $this->clearCache();
+        } catch (\Exception $e) {
+            $transaction->rollBack();
+            throw $e;
+        }
     }
 
     /**
@@ -169,7 +205,7 @@ class AppleService
     }
 
     /**
-     * Сбросить кеш списка яблок
+     * Сбросить кеш списка яблок и метрик
      *
      * Вызывается после любых операций изменения данных
      * (создание, обновление, удаление яблок).
@@ -178,6 +214,8 @@ class AppleService
      */
     private function clearCache(): void
     {
-        Yii::$app->cache->delete('apples_list');
+        $cache = Yii::$app->cache;
+        $cache->delete('apples_list');
+        $cache->delete('apple_metrics_full_report');
     }
 }

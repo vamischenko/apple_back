@@ -5,7 +5,11 @@ return [
         '@npm'   => '@vendor/npm-asset',
     ],
     'vendorPath' => dirname(dirname(__DIR__)) . '/vendor',
+    'bootstrap' => ['appleEventHandler'],
     'components' => [
+        'appleEventHandler' => [
+            'class' => \common\handlers\AppleEventHandler::class,
+        ],
         'authManager' => [
             'class' => \yii\rbac\DbManager::class,
             'cache' => 'cache',
@@ -24,11 +28,17 @@ return [
     'container' => [
         'singletons' => [
             // Регистрация AppleRepository как singleton
-            'common\repositories\AppleRepository' => 'common\repositories\AppleRepository',
+            \common\repositories\AppleRepository::class => \common\repositories\AppleRepository::class,
 
             // Регистрация AppleService с автоматическим внедрением зависимостей
-            'common\services\AppleService' => [
-                'class' => 'common\services\AppleService',
+            \common\services\AppleService::class => [
+                'class' => \common\services\AppleService::class,
+                // Repository будет автоматически внедрен через конструктор
+            ],
+
+            // Регистрация AppleMetricsService
+            \common\services\AppleMetricsService::class => [
+                'class' => \common\services\AppleMetricsService::class,
                 // Repository будет автоматически внедрен через конструктор
             ],
         ],

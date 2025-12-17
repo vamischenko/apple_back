@@ -8,6 +8,8 @@ use yii\behaviors\TimestampBehavior;
 use yii\db\ActiveRecord;
 use yii\web\IdentityInterface;
 use yii\filters\RateLimitInterface;
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
 
 /**
  * User model
@@ -75,7 +77,14 @@ class User extends ActiveRecord implements IdentityInterface, RateLimitInterface
      */
     public static function findIdentityByAccessToken($token, $type = null)
     {
-        throw new NotSupportedException('"findIdentityByAccessToken" is not implemented.');
+        // Проверяем JWT токен
+        $decoded = self::validateJwtToken($token);
+
+        if ($decoded === null) {
+            return null;
+        }
+
+        return static::findOne(['id' => $decoded->uid, 'status' => self::STATUS_ACTIVE]);
     }
 
     /**
@@ -252,5 +261,48 @@ class User extends ActiveRecord implements IdentityInterface, RateLimitInterface
         $this->allowance = $allowance;
         $this->allowance_updated_at = $timestamp;
         $this->save(false);
+    }
+
+    /**
+     * Генерация JWT токена для пользователя
+     *
+     * @param int $expirationTime Время жизни токена в секундах (по умолчанию 7 дней)
+     * @return string JWT токен
+     */
+    public function generateJwtToken(int $expirationTime = 604800): string
+    {
+        $jwtSecret = Yii::$app->params['jwtSecret'] ?? 'your-secret-key-change-this-in-production';
+
+        $payload = [
+            'iss' => Yii::$app->request->hostInfo ?? 'apple-api', // Издатель
+            'aud' => Yii::$app->request->hostInfo ?? 'apple-api', // Аудитория
+            'iat' => time(), // Время создания
+            'exp' => time() + $expirationTime, // Время истечения
+            'uid' => $this->id, // ID пользователя
+            'username' => $this->username, // Имя пользователя
+        ];
+
+        $token = JWT::encode($payload, $jwtSecret, 'HS256');
+
+        Yii::info("Generated JWT token for user #{$this->id} ({$this->username})", 'jwt');
+
+        return $token;
+    }
+
+    /**
+     * Проверка и декодирование JWT токена
+     *
+     * @param string $token JWT токен
+     * @return object|null Декодированные данные токена или null при ошибке
+     */
+    public static function validateJwtToken(string $token): ?object
+    {
+        try {
+            $jwtSecret = Yii::$app->params['jwtSecret'] ?? 'your-secret-key-change-this-in-production';
+            return JWT::decode($token, new Key($jwtSecret, 'HS256'));
+        } catch (\Exception $e) {
+            Yii::error("JWT validation failed: {$e->getMessage()}", 'jwt');
+            return null;
+        }
     }
 }
