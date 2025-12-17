@@ -67,8 +67,11 @@ class AppleService
         $count = (int)$count;
 
         if ($count < 1 || $count > 50) {
+            Yii::warning("Attempt to generate invalid count of apples: {$count}", 'apple');
             throw AppleValidationException::invalidCount($count);
         }
+
+        Yii::info("Starting generation of {$count} random apples", 'apple');
 
         $generated = 0;
 
@@ -80,6 +83,8 @@ class AppleService
 
         // Сбросить кеш после генерации
         $this->clearCache();
+
+        Yii::info("Successfully generated {$generated} out of {$count} requested apples", 'apple');
 
         return $generated;
     }
@@ -132,6 +137,9 @@ class AppleService
     public function deleteApple(int $id): void
     {
         $apple = $this->repository->findById($id);
+
+        Yii::info("Deleting apple #{$id} (color: {$apple->color}, status: {$apple->status})", 'apple');
+
         $this->repository->delete($apple);
 
         // Сбросить кеш после удаления

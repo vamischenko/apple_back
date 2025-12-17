@@ -108,9 +108,11 @@ class Apple extends ActiveRecord
         $apple->eaten_percent = 0;
 
         if ($apple->save()) {
+            Yii::info("Created new apple #{$apple->id} (color: {$apple->color})", 'apple');
             return $apple;
         }
 
+        Yii::error("Failed to create random apple", 'apple');
         return null;
     }
 
@@ -126,6 +128,7 @@ class Apple extends ActiveRecord
     public function fallToGround(): void
     {
         if ($this->status !== self::STATUS_ON_TREE) {
+            Yii::warning("Attempt to drop apple #{$this->id} that is not on tree (status: {$this->status})", 'apple');
             throw AppleInvalidStateException::alreadyFallen();
         }
 
@@ -133,8 +136,11 @@ class Apple extends ActiveRecord
         $this->fell_at = time();
 
         if (!$this->save()) {
+            Yii::error("Failed to save apple #{$this->id} after falling", 'apple');
             throw AppleInvalidStateException::saveFailed();
         }
+
+        Yii::info("Apple #{$this->id} (color: {$this->color}) fallen to ground", 'apple');
 
         // Генерация события о падении яблока
         $this->trigger(self::EVENT_APPLE_FALLEN);
@@ -161,6 +167,7 @@ class Apple extends ActiveRecord
     {
         // Проверяем, что яблоко на земле
         if ($this->status === self::STATUS_ON_TREE) {
+            Yii::warning("Attempt to eat apple #{$this->id} on tree", 'apple');
             throw AppleInvalidStateException::onTree();
         }
 
@@ -169,28 +176,35 @@ class Apple extends ActiveRecord
 
         // Проверяем, что яблоко не гнилое
         if ($this->status === self::STATUS_ROTTEN) {
+            Yii::warning("Attempt to eat rotten apple #{$this->id}", 'apple');
             throw AppleInvalidStateException::rotten();
         }
 
         // Проверяем валидность процента
         if ($percent <= 0 || $percent > 100) {
+            Yii::warning("Invalid percent {$percent} for eating apple #{$this->id}", 'apple');
             throw AppleValidationException::invalidPercent($percent);
         }
 
         // Проверяем, что не пытаемся съесть больше, чем осталось
         $remaining = 100 - $this->eaten_percent;
         if ($percent > $remaining) {
+            Yii::warning("Attempt to eat {$percent}% of apple #{$this->id}, but only {$remaining}% remaining", 'apple');
             throw AppleValidationException::exceedsRemaining($percent, $remaining);
         }
 
         $this->eaten_percent += $percent;
 
         if (!$this->save()) {
+            Yii::error("Failed to save apple #{$this->id} after eating", 'apple');
             throw AppleInvalidStateException::saveFailed();
         }
 
+        Yii::info("Eaten {$percent}% of apple #{$this->id} (color: {$this->color}), total eaten: {$this->eaten_percent}%", 'apple');
+
         // Если яблоко съедено полностью, удаляем его
         if ($this->eaten_percent >= 100) {
+            Yii::info("Apple #{$this->id} completely eaten and deleted", 'apple');
             $this->delete();
         }
     }
@@ -211,6 +225,8 @@ class Apple extends ActiveRecord
             if ($timeSinceFall >= self::ROTTEN_TIME) {
                 $this->status = self::STATUS_ROTTEN;
                 $this->save();
+
+                Yii::info("Apple #{$this->id} (color: {$this->color}) became rotten after {$timeSinceFall} seconds", 'apple');
 
                 // Генерация события о том, что яблоко испортилось
                 $this->trigger(self::EVENT_APPLE_ROTTEN);

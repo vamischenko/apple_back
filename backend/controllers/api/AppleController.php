@@ -9,6 +9,8 @@ use yii\filters\ContentNegotiator;
 use yii\web\Response;
 use common\models\Apple;
 use common\services\AppleService;
+use common\services\AppleMetricsService;
+use common\repositories\AppleRepository;
 use yii\web\NotFoundHttpException;
 
 /**
@@ -22,6 +24,7 @@ use yii\web\NotFoundHttpException;
  * POST   /api/apples/{id}/fall - уронить яблоко
  * POST   /api/apples/{id}/eat  - откусить от яблока
  * POST   /api/apples/generate  - сгенерировать несколько яблок
+ * GET    /api/apples/metrics   - получить метрики и статистику
  */
 class AppleController extends ActiveController
 {
@@ -30,7 +33,12 @@ class AppleController extends ActiveController
     /**
      * @var AppleService
      */
-    private $appleService;
+    private AppleService $appleService;
+
+    /**
+     * @var AppleMetricsService
+     */
+    private AppleMetricsService $metricsService;
 
     /**
      * Конструктор контроллера
@@ -38,7 +46,9 @@ class AppleController extends ActiveController
     public function __construct($id, $module, $config = [])
     {
         parent::__construct($id, $module, $config);
-        $this->appleService = new AppleService();
+        $repository = new AppleRepository();
+        $this->appleService = new AppleService($repository);
+        $this->metricsService = new AppleMetricsService($repository);
     }
 
     /**
@@ -212,9 +222,31 @@ class AppleController extends ActiveController
     }
 
     /**
+     * GET /api/apples/metrics - получить метрики и статистику
+     */
+    public function actionMetrics(): array
+    {
+        $type = Yii::$app->request->get('type', 'full');
+
+        switch ($type) {
+            case 'extended':
+                return $this->metricsService->getExtendedStatistics();
+            case 'creation':
+                return $this->metricsService->getCreationMetrics();
+            case 'rotten':
+                return $this->metricsService->getRottenMetrics();
+            case 'eating':
+                return $this->metricsService->getEatingMetrics();
+            case 'full':
+            default:
+                return $this->metricsService->getFullReport();
+        }
+    }
+
+    /**
      * Форматирование яблока для ответа API
      */
-    private function formatAppleResponse(Apple $apple)
+    private function formatAppleResponse(Apple $apple): array
     {
         return [
             'id' => $apple->id,
