@@ -19,7 +19,7 @@ class AppleRepository
      * @param array $orderBy Параметры сортировки
      * @return Apple[] Массив всех яблок
      */
-    public function findAll(array $orderBy = ['id' => SORT_DESC])
+    public function findAll(array $orderBy = ['id' => SORT_DESC]): array
     {
         return Apple::find()->orderBy($orderBy)->all();
     }
@@ -31,7 +31,7 @@ class AppleRepository
      * @return Apple
      * @throws AppleNotFoundException Если яблоко не найдено
      */
-    public function findById($id)
+    public function findById(int $id): Apple
     {
         $model = Apple::findOne(['id' => $id]);
 
@@ -51,7 +51,7 @@ class AppleRepository
      * @param Apple $apple Яблоко для сохранения
      * @return bool True в случае успеха
      */
-    public function save(Apple $apple)
+    public function save(Apple $apple): bool
     {
         return $apple->save();
     }
@@ -74,7 +74,7 @@ class AppleRepository
      *
      * @return Apple
      */
-    public function create()
+    public function create(): Apple
     {
         return new Apple();
     }
@@ -87,7 +87,7 @@ class AppleRepository
      *
      * @return int Количество обновленных яблок
      */
-    public function updateRottenStatusForAll()
+    public function updateRottenStatusForAll(): int
     {
         $apples = $this->findAll();
         $updated = 0;
@@ -110,7 +110,7 @@ class AppleRepository
      * @param string $status Статус яблока (on_tree, fallen, rotten)
      * @return Apple[] Массив яблок с указанным статусом
      */
-    public function findByStatus($status)
+    public function findByStatus(string $status): array
     {
         return Apple::find()
             ->where(['status' => $status])
@@ -123,7 +123,7 @@ class AppleRepository
      * @param string $color Цвет яблока (red, green, yellow)
      * @return Apple[] Массив яблок указанного цвета
      */
-    public function findByColor($color)
+    public function findByColor(string $color): array
     {
         return Apple::find()
             ->where(['color' => $color])
@@ -136,7 +136,7 @@ class AppleRepository
      * @param string|null $status Опциональный фильтр по статусу
      * @return int Количество яблок
      */
-    public function count($status = null)
+    public function count(?string $status = null): int
     {
         $query = Apple::find();
 
@@ -144,7 +144,7 @@ class AppleRepository
             $query->where(['status' => $status]);
         }
 
-        return $query->count();
+        return (int)$query->count();
     }
 
     /**
@@ -152,7 +152,7 @@ class AppleRepository
      *
      * @return array Массив со статистикой
      */
-    public function getStatistics()
+    public function getStatistics(): array
     {
         return [
             'total' => $this->count(),
@@ -173,7 +173,7 @@ class AppleRepository
      * @param int $id Идентификатор яблока
      * @return bool True, если яблоко существует
      */
-    public function exists($id)
+    public function exists(int $id): bool
     {
         return Apple::find()->where(['id' => $id])->exists();
     }

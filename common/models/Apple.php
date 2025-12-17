@@ -25,6 +25,12 @@ use common\exceptions\AppleValidationException;
  */
 class Apple extends ActiveRecord
 {
+    /** @var string Событие: яблоко упало */
+    const EVENT_APPLE_FALLEN = 'appleFallen';
+
+    /** @var string Событие: яблоко испортилось */
+    const EVENT_APPLE_ROTTEN = 'appleRotten';
+
     /** @var string Статус: яблоко на дереве */
     const STATUS_ON_TREE = 'on_tree';
 
@@ -45,7 +51,7 @@ class Apple extends ActiveRecord
      *
      * @return string Имя таблицы
      */
-    public static function tableName()
+    public static function tableName(): string
     {
         return 'apple';
     }
@@ -55,7 +61,7 @@ class Apple extends ActiveRecord
      *
      * @return array Массив правил валидации
      */
-    public function rules()
+    public function rules(): array
     {
         return [
             [['color', 'created_at'], 'required'],
@@ -72,7 +78,7 @@ class Apple extends ActiveRecord
      *
      * @return array Ассоциативный массив меток атрибутов
      */
-    public function attributeLabels()
+    public function attributeLabels(): array
     {
         return [
             'id' => 'ID',
@@ -93,7 +99,7 @@ class Apple extends ActiveRecord
      *
      * @return Apple|null Созданное яблоко или null в случае ошибки сохранения
      */
-    public static function createRandomApple()
+    public static function createRandomApple(): ?self
     {
         $apple = new self();
         $apple->color = self::COLORS[array_rand(self::COLORS)];
@@ -117,7 +123,7 @@ class Apple extends ActiveRecord
      * @return void
      * @throws AppleInvalidStateException Если яблоко не на дереве или не удалось сохранить изменения
      */
-    public function fallToGround()
+    public function fallToGround(): void
     {
         if ($this->status !== self::STATUS_ON_TREE) {
             throw AppleInvalidStateException::alreadyFallen();
@@ -129,6 +135,9 @@ class Apple extends ActiveRecord
         if (!$this->save()) {
             throw AppleInvalidStateException::saveFailed();
         }
+
+        // Генерация события о падении яблока
+        $this->trigger(self::EVENT_APPLE_FALLEN);
     }
 
     /**
@@ -148,7 +157,7 @@ class Apple extends ActiveRecord
      * @throws AppleInvalidStateException Если яблоко на дереве, испорчено или не удалось сохранить
      * @throws AppleValidationException Если процент некорректный или превышает остаток
      */
-    public function eat($percent)
+    public function eat(float $percent): void
     {
         // Проверяем, что яблоко на земле
         if ($this->status === self::STATUS_ON_TREE) {
@@ -194,7 +203,7 @@ class Apple extends ActiveRecord
      *
      * @return void
      */
-    public function updateRottenStatus()
+    public function updateRottenStatus(): void
     {
         if ($this->status === self::STATUS_FALLEN && $this->fell_at !== null) {
             $timeSinceFall = time() - $this->fell_at;
@@ -202,6 +211,9 @@ class Apple extends ActiveRecord
             if ($timeSinceFall >= self::ROTTEN_TIME) {
                 $this->status = self::STATUS_ROTTEN;
                 $this->save();
+
+                // Генерация события о том, что яблоко испортилось
+                $this->trigger(self::EVENT_APPLE_ROTTEN);
             }
         }
     }
@@ -215,7 +227,7 @@ class Apple extends ActiveRecord
      *
      * @return float Размер яблока (0.0 - 1.0)
      */
-    public function getSize()
+    public function getSize(): float
     {
         return (100 - $this->eaten_percent) / 100;
     }
@@ -228,7 +240,7 @@ class Apple extends ActiveRecord
      *
      * @return string Локализованное название статуса
      */
-    public function getStatusLabel()
+    public function getStatusLabel(): string
     {
         $labels = [
             self::STATUS_ON_TREE => 'На дереве',
@@ -248,7 +260,7 @@ class Apple extends ActiveRecord
      * @param int|null $timestamp UNIX timestamp для форматирования
      * @return string Отформатированная дата или "-"
      */
-    public function formatDate($timestamp)
+    public function formatDate(?int $timestamp): string
     {
         return $timestamp ? date('d.m.Y H:i', $timestamp) : '-';
     }

@@ -40,7 +40,7 @@ class AppleService
      *
      * @return Apple[] Массив всех яблок
      */
-    public function getAllApples()
+    public function getAllApples(): array
     {
         $cache = Yii::$app->cache;
         $key = 'apples_list';
@@ -62,7 +62,7 @@ class AppleService
      * @return int Количество фактически сгенерированных яблок
      * @throws AppleValidationException Если количество вне допустимого диапазона
      */
-    public function generateRandomApples($count)
+    public function generateRandomApples(int $count): int
     {
         $count = (int)$count;
 
@@ -92,7 +92,7 @@ class AppleService
      * @throws AppleNotFoundException Если яблоко не найдено
      * @throws AppleInvalidStateException Если яблоко не на дереве
      */
-    public function fallApple($id)
+    public function fallApple(int $id): void
     {
         $apple = $this->repository->findById($id);
         $apple->fallToGround();
@@ -111,7 +111,7 @@ class AppleService
      * @throws AppleInvalidStateException Если яблоко на дереве или гнилое
      * @throws AppleValidationException Если процент некорректный
      */
-    public function eatApple($id, $percent)
+    public function eatApple(int $id, float $percent): void
     {
         $apple = $this->repository->findById($id);
         $apple->eat($percent);
@@ -129,7 +129,7 @@ class AppleService
      * @throws \Throwable
      * @throws \yii\db\StaleObjectException
      */
-    public function deleteApple($id)
+    public function deleteApple(int $id): void
     {
         $apple = $this->repository->findById($id);
         $this->repository->delete($apple);
@@ -145,7 +145,7 @@ class AppleService
      * @return Apple
      * @throws AppleNotFoundException Если яблоко не найдено
      */
-    public function findApple($id)
+    public function findApple(int $id): Apple
     {
         return $this->repository->findById($id);
     }
@@ -155,7 +155,7 @@ class AppleService
      *
      * @return array Массив со статистикой
      */
-    public function getStatistics()
+    public function getStatistics(): array
     {
         return $this->repository->getStatistics();
     }
@@ -168,7 +168,7 @@ class AppleService
      *
      * @return void
      */
-    private function clearCache()
+    private function clearCache(): void
     {
         Yii::$app->cache->delete('apples_list');
     }
